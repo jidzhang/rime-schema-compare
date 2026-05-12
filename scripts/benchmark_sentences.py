@@ -166,6 +166,19 @@ def default_corpus_files(root: Path) -> List[Tuple[Path, str]]:
     return sorted((p.resolve(), p.stem) for p in d.glob("*.txt") if p.is_file())
 
 
+def _dedupe_preserve_order(items: List[str]) -> List[str]:
+    """Remove duplicate segments while keeping the first occurrence."""
+    seen: Set[str] = set()
+    out: List[str] = []
+    for item in items:
+        key = item.strip()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(item)
+    return out
+
+
 def _finalize_summary(stats: Dict[str, Dict[str, Any]], vendors: List[VendorConfig]) -> Dict[str, Any]:
     """Add human-facing rates: sentence = exact/total; character = 1 − (edits/gold_len) (micro, Levenshtein)."""
     summary: Dict[str, Any] = {}
@@ -712,11 +725,14 @@ def run_benchmark(
     logger.info("[语料:%s] 读取完成，耗时 %.2f ms", corpus_label, timings["read_text_ms"])
 
     t1 = time.perf_counter()
-    raw_sents = split_sentences(text)
+    raw_sents_all = split_sentences(text)
+    raw_sents = _dedupe_preserve_order(raw_sents_all)
     timings["split_ms"] = round((time.perf_counter() - t1) * 1000, 2)
     logger.info(
-        "[分句] 扫描分句（，“。” 与 “” 配对；小数 . 不切；丢弃含 、或《》的片段）完成，共 %d 个片段，耗时 %.2f ms",
+        "[分句] 扫描分句（，“。” 与 “” 配对；小数 . 不切；丢弃含 、或《》的片段）完成，原始 %d 个片段，去重后 %d 个片段（重复 %d 个），耗时 %.2f ms",
+        len(raw_sents_all),
         len(raw_sents),
+        len(raw_sents_all) - len(raw_sents),
         timings["split_ms"],
     )
 
