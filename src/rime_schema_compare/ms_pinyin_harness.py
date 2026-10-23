@@ -32,6 +32,8 @@ KEYEVENTF_KEYUP = 0x0002
 KLF_ACTIVATE = 0x00000001
 VK_LWIN = 0x5B
 VK_SPACE = 0x20
+VK_LCONTROL = 0xA2
+VK_LSHIFT = 0xA0
 VK_ESCAPE = 0x1B
 
 PREFERRED_EDIT_CLASSES = {
@@ -215,12 +217,32 @@ class WindowsImeSwitcher:
         "sogou_pinyin": ("搜狗拼音", "sogou"),
         "shouxin_pinyin": ("手心输入法", "shouxin"),
         "wechat_pinyin": ("wetype", "微信输入法", "wechat"),
+        "baidu_pinyin": ("百度输入法", "baidu"),
+        "iflytek_pinyin": ("讯飞输入法", "iflytek"),
+        "qq_pinyin": ("qq拼音", "qq拼音"),
+        "google_pinyin": ("谷歌拼音", "google pinyin"),
+        "doubao_pinyin": ("豆包输入法", "doubao"),
+        "qianwen_pinyin": ("千问输入法", "qianwen"),
+        "suyan_pinyin": ("素言", "suyan"),
+        "shuishan_pinyin": ("水杉", "metasequoia"),
+        "moqi_pinyin": ("moqi", "中州韵"),
+        "windinput_pinyin": ("清风", "windinput"),
     }
     _IME_DISPLAY = {
         "microsoft_pinyin": "微软拼音",
         "sogou_pinyin": "搜狗拼音",
         "shouxin_pinyin": "手心输入法",
         "wechat_pinyin": "微信输入法",
+        "baidu_pinyin": "百度输入法",
+        "iflytek_pinyin": "讯飞输入法",
+        "qq_pinyin": "QQ拼音",
+        "google_pinyin": "谷歌拼音2.7",
+        "doubao_pinyin": "豆包输入法",
+        "qianwen_pinyin": "千问输入法",
+        "suyan_pinyin": "素言输入法",
+        "shuishan_pinyin": "水杉输入法",
+        "moqi_pinyin": "墨奇输入法",
+        "windinput_pinyin": "清风输入法",
     }
 
     def __init__(self) -> None:
@@ -313,6 +335,19 @@ class WindowsImeSwitcher:
                 self._active_input_tip = confirmed.input_tip
                 return confirmed
             time.sleep(0.1)
+        # moqi 补丁：Win+空格循环兜底（部分三方输入法拒绝 ActivateTipProfile，
+        # 但系统级循环切换对全部输入法有效）
+        for combo in ("win_space", "ctrl_shift"):
+            for _ in range(len(self._profiles) + 2):
+                if combo == "win_space":
+                    self._send_win_space()
+                else:
+                    self._send_ctrl_shift()
+                time.sleep(0.4)
+                confirmed = self._wait_for_active_profile(profile, timeout_s=1.0)
+                if confirmed is not None:
+                    self._active_input_tip = confirmed.input_tip
+                    return confirmed
         raise RuntimeError(f"ime_switch_not_confirmed:{ime_key}")
 
     def _wait_for_active_profile(
@@ -410,6 +445,13 @@ class WindowsImeSwitcher:
         user32.keybd_event(VK_SPACE, 0, KEYEVENTF_KEYUP, 0)
         time.sleep(0.01)
         user32.keybd_event(VK_LWIN, 0, KEYEVENTF_KEYUP, 0)
+
+    def _send_ctrl_shift(self) -> None:
+        user32.keybd_event(VK_LCONTROL, 0, 0, 0)
+        user32.keybd_event(VK_LSHIFT, 0, 0, 0)
+        user32.keybd_event(VK_LSHIFT, 0, KEYEVENTF_KEYUP, 0)
+        user32.keybd_event(VK_LCONTROL, 0, KEYEVENTF_KEYUP, 0)
+        time.sleep(0.15)
 
     def _send_vk(self, vk: int) -> None:
         user32.keybd_event(vk, 0, 0, 0)
@@ -703,6 +745,13 @@ class WindowsPinyinImeHarness:
 
     def _press_escape(self) -> None:
         self._send_vk(VK_ESCAPE)
+
+    def _send_ctrl_shift(self) -> None:
+        user32.keybd_event(VK_LCONTROL, 0, 0, 0)
+        user32.keybd_event(VK_LSHIFT, 0, 0, 0)
+        user32.keybd_event(VK_LSHIFT, 0, KEYEVENTF_KEYUP, 0)
+        user32.keybd_event(VK_LCONTROL, 0, KEYEVENTF_KEYUP, 0)
+        time.sleep(0.15)
 
     def _send_vk(self, vk: int) -> None:
         user32.keybd_event(vk, 0, 0, 0)

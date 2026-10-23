@@ -94,6 +94,16 @@ IME_PROFILES: Dict[str, ImeProfile] = {
     "sogou_pinyin": ImeProfile("sogou_pinyin", "搜狗拼音", "Sogou Pinyin"),
     "shouxin_pinyin": ImeProfile("shouxin_pinyin", "手心输入法", "Shouxin Pinyin"),
     "wechat_pinyin": ImeProfile("wechat_pinyin", "微信输入法", "WeChat Pinyin"),
+    "baidu_pinyin": ImeProfile("baidu_pinyin", "百度输入法", "Baidu Pinyin"),
+    "iflytek_pinyin": ImeProfile("iflytek_pinyin", "讯飞输入法", "iFlytek Pinyin"),
+    "qq_pinyin": ImeProfile("qq_pinyin", "QQ拼音", "QQ Pinyin"),
+    "google_pinyin": ImeProfile("google_pinyin", "谷歌拼音2.7", "Google Pinyin 2.7"),
+    "doubao_pinyin": ImeProfile("doubao_pinyin", "豆包输入法", "Doubao Pinyin"),
+    "qianwen_pinyin": ImeProfile("qianwen_pinyin", "千问输入法", "Qianwen Pinyin"),
+    "suyan_pinyin": ImeProfile("suyan_pinyin", "素言输入法", "SuYan Pinyin"),
+    "shuishan_pinyin": ImeProfile("shuishan_pinyin", "水杉输入法", "Metasequoia Pinyin"),
+    "moqi_pinyin": ImeProfile("moqi_pinyin", "墨奇输入法", "Moqi IME"),
+    "windinput_pinyin": ImeProfile("windinput_pinyin", "清风输入法", "WindInput"),
 }
 
 IME_HARNESS_DEFAULTS: Dict[str, Dict[str, Any]] = {
@@ -877,7 +887,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--settle-timeout-s", type=float, default=3.0, help="Seconds to wait for committed text to settle")
     parser.add_argument("--inter-key-delay-ms", type=float, default=12.0, help="Delay between simulated key presses")
     parser.add_argument("--commit-delay-ms", type=float, default=120.0, help="Delay before sending Space")
+    parser.add_argument("--min-hanzi", type=int, default=5, help="Min hanzi chars per segment (2 for word-level corpus)")
     args = parser.parse_args(argv)
+    if getattr(args, "min_hanzi", 5) != 5:
+        import rime_schema_compare.text_pipeline as _tp
+        import rime_schema_compare.benchmark_common as _bc
+        _tp.MIN_EVAL_HANZI_CHARS = int(args.min_hanzi)
+        _bc.MIN_EVAL_HANZI_CHARS = int(args.min_hanzi)
 
     root = _REPO_ROOT
     out_dir = (root / args.out_dir).resolve()
