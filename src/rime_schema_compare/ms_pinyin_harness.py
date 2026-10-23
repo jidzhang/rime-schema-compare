@@ -227,6 +227,7 @@ class WindowsImeSwitcher:
         "shuishan_pinyin": ("水杉", "metasequoia"),
         "moqi_pinyin": ("moqi", "中州韵"),
         "windinput_pinyin": ("清风", "windinput"),
+        "qingjian_pinyin": ("青简", "qingjian"),
     }
     _IME_DISPLAY = {
         "microsoft_pinyin": "微软拼音",
@@ -243,11 +244,13 @@ class WindowsImeSwitcher:
         "shuishan_pinyin": "水杉输入法",
         "moqi_pinyin": "墨奇输入法",
         "windinput_pinyin": "清风输入法",
+        "qingjian_pinyin": "青简输入法",
     }
 
     def __init__(self) -> None:
         self._language_payload = self._load_language_payload()
         self._profiles = self._build_profiles(self._language_payload)
+        self._append_registry_profiles()
         self._active_input_tip = self.get_default_input_tip()
 
     def list_installed_profiles(self, language_tag: str = "zh-Hans-CN") -> List[InstalledImeProfile]:
@@ -436,6 +439,68 @@ class WindowsImeSwitcher:
                     )
                 )
         return out
+
+    def _append_registry_profiles(self) -> None:
+        """Add TIPs registered in CTF but missing from Get-WinUserLanguageList.
+
+        Some installers (e.g. Qingjian) register the TSF profile via regsvr32
+        without adding it to the current user's InputMethodTips. The profile
+        still activates through ITfInputProcessorProfileMgr, so include it;
+        only one profile per IME key is added to avoid stale extra entries.
+        """
+        known_keys = {p.ime_key for p in self._profiles}
+        seen_tips = {(p.tip_guid, p.profile_guid) for p in self._profiles}
+        for hive in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
+            for subkey in (
+                r"SOFTWARE\Microsoft\CTF\TIP",
+                r"SOFTWARE\WOW6432Node\Microsoft\CTF\TIP",
+            ):
+                try:
+                    root = winreg.OpenKey(hive, subkey)
+                except OSError:
+                    continue
+                with root:
+                    index = 0
+                    while True:
+                        try:
+                            tip_name = winreg.EnumKey(root, index)
+                        except OSError:
+                            break
+                        index += 1
+                        try:
+                            lang_key = winreg.OpenKey(
+                                root, rf"{tip_name}\LanguageProfile\0x00000804"
+                            )
+                        except OSError:
+                            continue
+                        with lang_key:
+                            profile_index = 0
+                            while True:
+                                try:
+                                    profile_name = winreg.EnumKey(lang_key, profile_index)
+                                except OSError:
+                                    break
+                                profile_index += 1
+                                tip_guid = _normalize_guid(tip_name)
+                                profile_guid = _normalize_guid(profile_name)
+                                if (tip_guid, profile_guid) in seen_tips:
+                                    continue
+                                desc = self._lookup_profile_description(tip_guid, profile_guid)
+                                ime_key = self._ime_key_for_description(desc)
+                                if not ime_key or ime_key in known_keys:
+                                    continue
+                                self._profiles.append(
+                                    InstalledImeProfile(
+                                        ime_key=ime_key,
+                                        display_name=self._IME_DISPLAY[ime_key],
+                                        input_tip=f"0804:{{{tip_guid}}}{{{profile_guid}}}",
+                                        tip_guid=tip_guid,
+                                        profile_guid=profile_guid,
+                                        description=desc,
+                                    )
+                                )
+                                known_keys.add(ime_key)
+                                seen_tips.add((tip_guid, profile_guid))
 
     def _send_win_space(self) -> None:
         user32.keybd_event(VK_LWIN, 0, 0, 0)
@@ -687,9 +752,21 @@ class WindowsPinyinImeHarness:
                 self._focus_host()
                 self._open_ime()
                 time.sleep(0.08)
-                if self._probe_hanzi_commit():
+                committed = self._probe_commit_text()
+                if self._is_hanzi_commit(committed):
                     self._chinese_mode_ready = True
                     return True
+                if committed.lower() == self.probe_input.lower():
+                    # English mode: a lone Shift toggles Chinese/English in
+                    # most pinyin IMEs (Qingjian, Sogou, Microsoft Pinyin...).
+                    self._send_shift()
+                    time.sleep(0.15)
+                    self._focus_host()
+                    self._open_ime()
+                    time.sleep(0.08)
+                    if self._probe_hanzi_commit():
+                        self._chinese_mode_ready = True
+                        return True
             finally:
                 try:
                     self.reset_host()
@@ -719,18 +796,23 @@ class WindowsPinyinImeHarness:
         finally:
             imm32.ImmReleaseContext(self._edit_hwnd, himc)
 
-    def _probe_hanzi_commit(self) -> bool:
+    def _probe_commit_text(self) -> str:
         self.reset_host()
         self._focus_host()
         self._send_ascii_keys(self.probe_input)
         time.sleep(self.commit_delay_s)
         self._press_space()
-        committed = self._wait_for_committed_text().strip()
+        return self._wait_for_committed_text().strip()
+
+    def _is_hanzi_commit(self, committed: str) -> bool:
         if not committed:
             return False
         if committed.lower() == self.probe_input.lower():
             return False
         return any("\u4e00" <= ch <= "\u9fff" for ch in committed)
+
+    def _probe_hanzi_commit(self) -> bool:
+        return self._is_hanzi_commit(self._probe_commit_text())
 
     def _send_ascii_keys(self, text: str) -> None:
         for ch in text:
@@ -745,6 +827,10 @@ class WindowsPinyinImeHarness:
 
     def _press_escape(self) -> None:
         self._send_vk(VK_ESCAPE)
+
+    def _send_shift(self) -> None:
+        self._send_vk(VK_LSHIFT)
+        time.sleep(0.05)
 
     def _send_ctrl_shift(self) -> None:
         user32.keybd_event(VK_LCONTROL, 0, 0, 0)

@@ -104,6 +104,7 @@ IME_PROFILES: Dict[str, ImeProfile] = {
     "shuishan_pinyin": ImeProfile("shuishan_pinyin", "水杉输入法", "Metasequoia Pinyin"),
     "moqi_pinyin": ImeProfile("moqi_pinyin", "墨奇输入法", "Moqi IME"),
     "windinput_pinyin": ImeProfile("windinput_pinyin", "清风输入法", "WindInput"),
+    "qingjian_pinyin": ImeProfile("qingjian_pinyin", "青简输入法", "Qingjian Pinyin"),
 }
 
 IME_HARNESS_DEFAULTS: Dict[str, Dict[str, Any]] = {
