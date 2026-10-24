@@ -957,6 +957,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--inter-key-delay-ms", type=float, default=12.0, help="Delay between simulated key presses")
     parser.add_argument("--commit-delay-ms", type=float, default=120.0, help="Delay before sending Space")
     parser.add_argument("--min-hanzi", type=int, default=5, help="Min hanzi chars per segment (2 for word-level corpus)")
+    parser.add_argument("--extra-imes", type=Path, help="Optional JSON {ime_key: {patterns:[...], display:...}} to register IMEs without engine code changes")
     args = parser.parse_args(argv)
     if getattr(args, "min_hanzi", 5) != 5:
         import rime_schema_compare.text_pipeline as _tp
@@ -968,6 +969,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     out_dir = (root / args.out_dir).resolve()
     corpora = _corpus_inputs(root, args.corpus)
     eval_synonyms, eval_synonyms_path = init_eval_synonyms(root, args.eval_synonyms)
+    extra_profiles = None
+    if args.extra_imes and Path(args.extra_imes).is_file():
+        try:
+            payload = json.loads(Path(args.extra_imes).read_text(encoding="utf-8"))
+            if isinstance(payload, dict):
+                extra_profiles = payload
+                for key, spec in payload.items():
+                    if isinstance(spec, dict) and spec.get("patterns"):
+                        display = str(spec.get("display") or key)
+                        IME_PROFILES[key] = ImeProfile(key, display, display)
+        except (OSError, ValueError):
+            extra_profiles = None
     profiles = _ime_profiles(args.ime)
     stamp = args.stamp or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     harness_kwargs = {
@@ -981,7 +994,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         ", ".join(f"{p.display_name} ({p.ime_key})" for p in profiles),
     )
 
-    switcher = WindowsImeSwitcher()
+    switcher = WindowsImeSwitcher(extra_profiles=extra_profiles)
     logger.info("[启动] 输入法列表项: %s", " | ".join(switcher.list_input_method_texts()))
     available_profiles: List[ImeProfile] = []
     for profile in profiles:

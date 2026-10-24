@@ -4,8 +4,9 @@
 Prints one [OK]/[MISSING] line per IME and finishes with a machine-readable
 `OK_IMES=<keys>` line that run.bat consumes to skip missing IMEs cleanly.
 
-Usage: python preflight_imes.py <ime_key> [ime_key ...]
+Usage: python preflight_imes.py [--extra-imes imes.json] <ime_key> [ime_key ...]
 """
+import json
 import sys
 from pathlib import Path
 
@@ -13,12 +14,30 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from rime_schema_compare.ms_pinyin_harness import WindowsImeSwitcher  # noqa: E402
 
 
+def load_extra(path):
+    try:
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
 def main(argv):
-    keys = [k.strip() for k in argv if k.strip()]
+    extra_path = None
+    args = []
+    for a in argv:
+        if a.startswith("--extra-imes="):
+            extra_path = a.split("=", 1)[1]
+        elif a == "--extra-imes" :
+            continue
+        else:
+            args.append(a)
+    extra = load_extra(extra_path) if extra_path and Path(extra_path).is_file() else None
+    keys = [k.strip() for k in args if k.strip() and not k.startswith("--")]
     if not keys:
-        print("usage: preflight_imes.py <ime_key> [ime_key ...]")
+        print("usage: preflight_imes.py [--extra-imes imes.json] <ime_key> [ime_key ...]")
         return 2
-    switcher = WindowsImeSwitcher()
+    switcher = WindowsImeSwitcher(extra_profiles=extra)
     by_key = {p.ime_key: p for p in switcher.list_installed_profiles()}
     ok = []
     for key in keys:

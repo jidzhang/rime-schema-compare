@@ -250,7 +250,19 @@ class WindowsImeSwitcher:
         "ximeyao_pinyin": "曦码·曜输入法",
     }
 
-    def __init__(self) -> None:
+    def __init__(self, extra_profiles: Optional[Dict[str, Any]] = None) -> None:
+        # extra_profiles: {ime_key: {"patterns": [...], "display": "..."}}，
+        # 来自 bench 仓 imes.json 之类的配置——加新输入法不必改引擎代码。
+        self._ime_patterns: Dict[str, Any] = dict(self._IME_PATTERNS)
+        self._ime_display: Dict[str, Any] = dict(self._IME_DISPLAY)
+        for key, spec in (extra_profiles or {}).items():
+            if not isinstance(spec, dict):
+                continue
+            pats = tuple(spec.get("patterns") or ())
+            if not pats:
+                continue
+            self._ime_patterns[key] = pats
+            self._ime_display[key] = str(spec.get("display") or key)
         self._language_payload = self._load_language_payload()
         self._profiles = self._build_profiles(self._language_payload)
         self._append_registry_profiles()
@@ -381,7 +393,7 @@ class WindowsImeSwitcher:
 
     def _ime_key_for_description(self, description: str) -> Optional[str]:
         desc = (description or "").lower()
-        for ime_key, patterns in self._IME_PATTERNS.items():
+        for ime_key, patterns in self._ime_patterns.items():
             if any(p.lower() in desc for p in patterns):
                 return ime_key
         return None
@@ -434,7 +446,7 @@ class WindowsImeSwitcher:
                 out.append(
                     InstalledImeProfile(
                         ime_key=ime_key,
-                        display_name=self._IME_DISPLAY[ime_key],
+                        display_name=self._ime_display[ime_key],
                         input_tip=str(tip),
                         tip_guid=tip_guid,
                         profile_guid=profile_guid,
@@ -495,7 +507,7 @@ class WindowsImeSwitcher:
                                 self._profiles.append(
                                     InstalledImeProfile(
                                         ime_key=ime_key,
-                                        display_name=self._IME_DISPLAY[ime_key],
+                                        display_name=self._ime_display[ime_key],
                                         input_tip=f"0804:{{{tip_guid}}}{{{profile_guid}}}",
                                         tip_guid=tip_guid,
                                         profile_guid=profile_guid,
