@@ -104,7 +104,12 @@ IME_PROFILES: Dict[str, ImeProfile] = {
     "shuishan_pinyin": ImeProfile("shuishan_pinyin", "水杉输入法", "Metasequoia Pinyin"),
     "moqi_pinyin": ImeProfile("moqi_pinyin", "墨奇输入法", "Moqi IME"),
     "windinput_pinyin": ImeProfile("windinput_pinyin", "清风输入法", "WindInput"),
+    "qingjian_pinyin": ImeProfile("qingjian_pinyin", "青简输入法", "Qingjian IME"),
+    "ximeyao_pinyin": ImeProfile("ximeyao_pinyin", "曦码·曜输入法", "XimeYao IME"),
 }
+
+# 连续 N 句无上屏文本即判定输入法未真正工作（弹窗/英文模式/引擎未唤醒），提前中止本语料。
+NO_OUTPUT_ABORT_LIMIT = 8
 
 IME_HARNESS_DEFAULTS: Dict[str, Dict[str, Any]] = {
     # 手心输入法首次唤起候选窗稍慢，使用更稳定的探针和等待参数。
@@ -115,6 +120,13 @@ IME_HARNESS_DEFAULTS: Dict[str, Dict[str, Any]] = {
         "settle_timeout_s": 5.0,
     },
     "wechat_pinyin": {
+        "probe_input": "ni",
+        "max_prepare_attempts": 5,
+        "commit_delay_s": 0.30,
+        "settle_timeout_s": 5.0,
+    },
+    # 曦码·曜新装机，按首次唤起候选窗偏慢的保守参数处理。
+    "ximeyao_pinyin": {
         "probe_input": "ni",
         "max_prepare_attempts": 5,
         "commit_delay_s": 0.30,
@@ -368,6 +380,11 @@ def run_blackbox_batch(
     except Exception as exc:
         logger.warning("[黑盒宿主 %s] 启动或自检失败: %s", vendor.key, exc)
         for prepared in prepared_corpora:
+            print(
+                "[RESULT] ime=%s corpus=%s typed=0 total=%d exact=0 aborted=no error=%s"
+                % (vendor.key, prepared.corpus_label, len(prepared.prepared_vendor), exc),
+                flush=True,
+            )
             payloads[prepared.corpus_label] = _payload_for_failed_corpus(
                 prepared,
                 profile,
@@ -397,12 +414,37 @@ def run_blackbox_batch(
             )
             t_dec = time.perf_counter()
             done = 0
+            empty_streak = 0
+            aborted_no_output = False
             for slot in prepared.prepared_vendor:
                 stats[vendor.key]["sentences_total"] += 1
                 res = harness.decode(slot["input"])
                 pred = res.prediction if res.ok else ""
                 if not res.ok:
                     stats[vendor.key]["decode_failed"] += 1
+                if not pred.strip():
+                    empty_streak += 1
+                else:
+                    empty_streak = 0
+                if empty_streak >= NO_OUTPUT_ABORT_LIMIT:
+                    aborted_no_output = True
+                    logger.warning(
+                        "[中止 %s] 语料 %s 连续 %d 句无上屏文本，提前放弃剩余句子。"
+                        "常见原因：输入法弹出激活/登录/升级窗口、被切到英文模式、或引擎未随 TSF 激活而唤醒。"
+                        "处理：在屏幕上手动切换到该输入法、输入一个汉字确认候选窗出现（顺手关掉弹窗），再单独重跑本输入法。",
+                        vendor.key,
+                        prepared.corpus_label,
+                        empty_streak,
+                    )
+                    logger.warning(
+                        "[ABORT] %s corpus %s: no committed text in %d consecutive items. "
+                        "Likely an activation/login popup, English mode, or the IME engine did not wake up. "
+                        "Fix: switch to this IME manually, type one hanzi to confirm the candidate window shows, then rerun this IME.",
+                        vendor.key,
+                        prepared.corpus_label,
+                        empty_streak,
+                    )
+                    break
                 exact = res.ok and sentence_exact_match(norm(pred), norm(slot["gold"]))
                 if exact:
                     stats[vendor.key]["exact_matches"] += 1
@@ -429,6 +471,21 @@ def run_blackbox_batch(
                         done,
                         len(prepared.prepared_vendor),
                     )
+            if aborted_no_output:
+                for slot in prepared.prepared_vendor[len(rows):]:
+                    rows.append(
+                        {
+                            "corpus": prepared.corpus_label,
+                            "index": slot["index"],
+                            "vendor": vendor.key,
+                            "gold": slot["gold"],
+                            "input": slot["input"],
+                            "prediction": "",
+                            "exact": False,
+                            "cer": 1.0,
+                            "error": "not_typed_aborted_no_output",
+                        }
+                    )
             decode_ms = round((time.perf_counter() - t_dec) * 1000, 2)
             logger.info(
                 "[黑盒解码 %s] 完成: 语料 %s | 本方案 %d 句，逐句黑盒输入 %.2f ms",
@@ -436,6 +493,18 @@ def run_blackbox_batch(
                 prepared.corpus_label,
                 done,
                 decode_ms,
+            )
+            print(
+                "[RESULT] ime=%s corpus=%s typed=%d total=%d exact=%d aborted=%s"
+                % (
+                    vendor.key,
+                    prepared.corpus_label,
+                    done,
+                    len(prepared.prepared_vendor),
+                    stats[vendor.key]["exact_matches"],
+                    "yes" if aborted_no_output else "no",
+                ),
+                flush=True,
             )
             payloads[prepared.corpus_label] = {
                 "generated_at_utc": stamp,
@@ -914,9 +983,31 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     switcher = WindowsImeSwitcher()
     logger.info("[启动] 输入法列表项: %s", " | ".join(switcher.list_input_method_texts()))
+    available_profiles: List[ImeProfile] = []
     for profile in profiles:
-        resolved = switcher.resolve_profile(profile.ime_key)
+        try:
+            resolved = switcher.resolve_profile(profile.ime_key)
+        except RuntimeError as exc:
+            logger.warning(
+                "[跳过] %s (%s) 未在系统语言列表启用——未安装或未在语言设置中勾选。该输入法本轮不测。(%s)",
+                profile.display_name,
+                profile.ime_key,
+                exc,
+            )
+            logger.warning(
+                "[SKIP] %s (%s) is not enabled in the Windows language list (not installed or unticked); it will not be tested.",
+                profile.display_name,
+                profile.ime_key,
+            )
+            continue
         logger.info("[启动] 已识别输入法资料: %s -> %s | InputTip=%s", profile.display_name, resolved.description, resolved.input_tip)
+        available_profiles.append(profile)
+    if not available_profiles:
+        raise SystemExit(
+            "None of the requested IMEs is enabled in the Windows language list. "
+            "Install/tick them under Settings > Time & language > Language, then rerun."
+        )
+    profiles = available_profiles
     prepared_corpora = [_prepare_blackbox_corpus(corpus_path, stem) for corpus_path, stem in corpora]
     corpus_files: Dict[str, str] = {prepared.corpus_label: str(prepared.corpus_path) for prepared in prepared_corpora}
 

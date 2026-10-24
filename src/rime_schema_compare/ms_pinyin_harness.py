@@ -31,6 +31,7 @@ WM_CHAR = 0x0102
 KEYEVENTF_KEYUP = 0x0002
 KLF_ACTIVATE = 0x00000001
 VK_LWIN = 0x5B
+VK_MENU = 0x12
 VK_SPACE = 0x20
 VK_LCONTROL = 0xA2
 VK_LSHIFT = 0xA0
@@ -227,6 +228,8 @@ class WindowsImeSwitcher:
         "shuishan_pinyin": ("水杉", "metasequoia"),
         "moqi_pinyin": ("moqi", "中州韵"),
         "windinput_pinyin": ("清风", "windinput"),
+        "qingjian_pinyin": ("青简", "qingjian"),
+        "ximeyao_pinyin": ("曦码", "ximeyao"),
     }
     _IME_DISPLAY = {
         "microsoft_pinyin": "微软拼音",
@@ -243,6 +246,8 @@ class WindowsImeSwitcher:
         "shuishan_pinyin": "水杉输入法",
         "moqi_pinyin": "墨奇输入法",
         "windinput_pinyin": "清风输入法",
+        "qingjian_pinyin": "青简输入法",
+        "ximeyao_pinyin": "曦码·曜输入法",
     }
 
     def __init__(self) -> None:
@@ -680,6 +685,28 @@ class WindowsPinyinImeHarness:
         time.sleep(0.05)
         user32.SetForegroundWindow(self._edit_hwnd)
         time.sleep(0.05)
+        self._verify_host_focus()
+
+    def _verify_host_focus(self) -> None:
+        # 无人值守的会话里，Windows 前台锁会让 SetForegroundWindow 静默失败，
+        # 合成按键全部落空（表现为 ime_not_ready / 空上屏）。先敲一下 Alt 解前台锁，
+        # 再确认焦点真的落在宿主上；确认不了就显式报错，绝不往虚空里打字。
+        for _ in range(3):
+            hwnd = user32.GetForegroundWindow()
+            if hwnd in (self._window_hwnd, self._edit_hwnd):
+                return
+            user32.keybd_event(VK_MENU, 0, 0, 0)
+            time.sleep(0.02)
+            user32.keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0)
+            time.sleep(0.05)
+            user32.SetForegroundWindow(self._window_hwnd)
+            time.sleep(0.05)
+            user32.SetForegroundWindow(self._edit_hwnd)
+            time.sleep(0.1)
+        raise RuntimeError(
+            "host_focus_lost (could not bring the Notepad host to the foreground; "
+            "synthetic keys would go nowhere — log in at the console / click once, then rerun)"
+        )
 
     def _ensure_chinese_mode(self) -> bool:
         for _ in range(self.max_prepare_attempts):
@@ -780,7 +807,17 @@ class WindowsPinyinImeHarness:
         length = int(user32.SendMessageW(self._edit_hwnd, WM_GETTEXTLENGTH, 0, 0))
         buf = ctypes.create_unicode_buffer(length + 1)
         user32.SendMessageW(self._edit_hwnd, WM_GETTEXT, length + 1, buf)
-        return buf.value
+        return _sanitize_utf16(buf.value)
+
+
+def _sanitize_utf16(text: str) -> str:
+    # IME 候选可能把未配对的 UTF-16 代理项带进编辑框（实测搜狗出现 \udfed），
+    # 原样返回会让下游 UTF-8 写盘直接崩；统一替换成 U+FFFD。
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError:
+        text = text.encode("utf-8", "replace").decode("utf-8")
+    return text
 
 
 # Backward-compatible alias for older imports.
