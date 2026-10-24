@@ -64,6 +64,9 @@ class InstalledImeProfile:
     tip_guid: str
     profile_guid: str
     description: str
+    # 老式 IMM 输入法（如华宇 V6.9、早期全拼）以键盘布局 KLID 注册，
+    # 在 TSF 里无 GUID（active payload 全零、hkl=KLID），须按 HKL 激活。
+    hkl_klid: str = ""
 
     @property
     def list_item_text(self) -> str:
@@ -213,6 +216,9 @@ class WindowsImeSwitcher:
     _TIP_RE = re.compile(
         r"^(?P<lang>[0-9A-Fa-f]+):\{(?P<tip>[^}]+)\}\{(?P<profile>[^}]+)\}$"
     )
+    _LEGACY_KLID_RE = re.compile(
+        r"^[0-9A-Fa-f]{4}:(?P<klid>E[0-9A-Fa-f]{3}[0-9A-Fa-f]{4})$"
+    )
     _IME_PATTERNS = {
         "microsoft_pinyin": ("microsoft pinyin", "微软拼音"),
         "sogou_pinyin": ("搜狗拼音", "sogou"),
@@ -324,8 +330,23 @@ class WindowsImeSwitcher:
         self._send_vk(VK_ESCAPE)
         time.sleep(0.05)
 
+    def _lookup_legacy_layout_text(self, klid: str) -> str:
+        try:
+            with winreg.OpenKey(
+                winreg.HKEY_LOCAL_MACHINE,
+                r"SYSTEM\CurrentControlSet\Control\Keyboard Layouts" + "\\" + klid,
+            ) as k:
+                try:
+                    return str(winreg.QueryValueEx(k, "Layout Text")[0])
+                except FileNotFoundError:
+                    return ""
+        except FileNotFoundError:
+            return ""
+
     def activate_profile(self, ime_key: str, focus_callback=None) -> InstalledImeProfile:
         profile = self.resolve_profile(ime_key)
+        if profile.hkl_klid:
+            return self._activate_legacy_profile(profile, focus_callback)
         current = self.get_active_profile()
         if current is not None and (
             current.ime_key == profile.ime_key
@@ -367,6 +388,27 @@ class WindowsImeSwitcher:
                     self._active_input_tip = confirmed.input_tip
                     return confirmed
         raise RuntimeError(f"ime_switch_not_confirmed:{ime_key}")
+
+    def _activate_legacy_profile(self, profile: InstalledImeProfile, focus_callback=None) -> InstalledImeProfile:
+        klid = profile.hkl_klid
+        for _ in range(3):
+            if focus_callback is not None:
+                focus_callback()
+            hkl = user32.LoadKeyboardLayoutW(klid, KLF_ACTIVATE)
+            fg = user32.GetForegroundWindow()
+            if hkl and fg:
+                user32.PostMessageW(fg, WM_INPUTLANGCHANGEREQUEST, 0, hkl)
+            time.sleep(0.4)
+            try:
+                payload = self.get_active_profile_payload()
+                active_hkl = str(payload.get("hkl") or "")
+                if klid.lower() in active_hkl.lower():
+                    self._active_input_tip = profile.input_tip
+                    return profile
+            except RuntimeError:
+                pass
+            time.sleep(0.2)
+        raise RuntimeError(f"ime_switch_not_confirmed:{profile.ime_key}")
 
     def _wait_for_active_profile(
         self, expected: InstalledImeProfile, timeout_s: float = 3.0
@@ -434,8 +476,28 @@ class WindowsImeSwitcher:
             if not isinstance(raw_tips, list):
                 continue
             for tip in raw_tips:
-                m = self._TIP_RE.match(str(tip))
-                if not m:
+                tip_str = str(tip)
+                m = self._TIP_RE.match(tip_str)
+                legacy = self._LEGACY_KLID_RE.match(tip_str)
+                if not m and not legacy:
+                    continue
+                if legacy:
+                    klid = legacy.group("klid").upper()
+                    desc = self._lookup_legacy_layout_text(klid)
+                    ime_key = self._ime_key_for_description(desc)
+                    if not ime_key:
+                        continue
+                    out.append(
+                        InstalledImeProfile(
+                            ime_key=ime_key,
+                            display_name=self._ime_display[ime_key],
+                            input_tip=tip_str,
+                            tip_guid="",
+                            profile_guid="",
+                            description=desc,
+                            hkl_klid=klid,
+                        )
+                    )
                     continue
                 tip_guid = m.group("tip").upper()
                 profile_guid = m.group("profile").upper()
