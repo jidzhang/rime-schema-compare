@@ -7,7 +7,25 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List
 
-from pypinyin import Style, lazy_pinyin
+from pypinyin import Style, lazy_pinyin, load_phrases_dict
+
+# 语料读音纠错词典（2026-10-25 全量人工核对 zhihu120+words234 共 570 条，
+# 确认 6 句多音字机械转换错误，全部修正于此；语料文本不动，修的是转换器）：
+#   降雨 xiáng→jiàng（词组表把"降雨"映射到了"投降"系读音）
+#   得重备/得重 的"得"děi、"重"chóng（"得重X"不在 pypinyin 词表，回退默认音 de/zhong）
+#   重做/重画/重绘 的"重"chóng（同上，"重新"在词表所以原来就对）
+# 回归守卫：重新(chong)/重要(zhong)/比重(zhong)/系因(xi)/着陆(zhuo)/为遇难(wei/nan)
+# 全部验证不受影响（见 2026-10-25 校验记录）。
+load_phrases_dict({
+    "降雨": [["jiàng"], ["yǔ"]],
+    # 分词器最长匹配会先切出"受降"（受降，投降义）吃掉"降"，
+    # 注入三字词抢占匹配路径（"受降雨">"受降"）：
+    "受降雨": [["shòu"], ["jiàng"], ["yǔ"]],
+    "得重": [["děi"], ["chóng"]],
+    "重做": [["chóng"], ["zuò"]],
+    "重画": [["chóng"], ["huà"]],
+    "重绘": [["chóng"], ["huì"]],
+})
 
 # 分句后片段须能通过 is_pure_hanzi_segment，故全角逗号、句号始终作为切分点；引号内逗号也要切，否则会留下「汉字+，」。
 # 用 “ ” 配对深度避免策略性误伤（主要纠偏：ASCII 句点 `.` 在小数 68.4 等处不可当句号）。
