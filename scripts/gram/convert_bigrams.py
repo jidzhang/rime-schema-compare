@@ -42,6 +42,10 @@ def main() -> int:
                     help="weight spec name=mult, repeatable (e.g. --weight zhihu=30 --weight news=2); 'default=1' fallback")
     ap.add_argument("--min-count", type=int, default=1,
                     help="drop pairs below this weighted count")
+    ap.add_argument("--min-sources", type=int, default=1,
+                    help="quality gate: keep signatures appearing in >=N source files")
+    ap.add_argument("--emit-top", type=int, default=0,
+                    help="emit only top-N signatures by weighted count (0=all)")
     args = ap.parse_args()
 
     weights = {}
@@ -51,6 +55,7 @@ def main() -> int:
     default_w = weights.get("default", 1.0)
 
     agg: dict[str, float] = defaultdict(float)
+    src_hits: dict[str, set] = defaultdict(set)
     for item in args.tsv:
         if "=" in item:
             name, _, path = item.partition("=")
@@ -80,13 +85,15 @@ def main() -> int:
                     continue
                 if c <= 0:
                     continue
-                agg[sig(w1, w2)] += c * w
+                s = sig(w1, w2)
+                agg[s] += c * w
+                src_hits[s].add(name)
                 n_pairs += 1
         sys.stderr.write(f"[convert] {name} weight={w} rows={n_rows} pairs={n_pairs}\n")
 
     out = 0
     for k, v in sorted(agg.items()):
-        if v < args.min_count:
+        if v < args.min_count or len(src_hits[k]) < args.min_sources:
             continue
         # build_grammar reads "key value" whitespace-separated from stdin
         sys.stdout.write(f"{k} {v:g}\n")

@@ -57,6 +57,8 @@ DEFAULT_VENDORS: List[VendorConfig] = [
     VendorConfig("oh_my_rime", "vendor/oh-my-rime", "rime_mint"),
     VendorConfig("rime_frost_moqiprod", "vendor/rime-frost_moqiprod", "rime_frost"),
     VendorConfig("rime_frost_newgram", "vendor/rime-frost_newgram", "rime_frost"),
+    VendorConfig("rime_frost_newgen", "vendor/rime-frost_newgen", "rime_frost"),
+    VendorConfig("rime_frost_nm67", "vendor/rime-frost_nm67", "rime_frost"),
     VendorConfig("oh_my_rime_with_gram", "vendor/oh-my-rime_with_gram", "rime_mint"),
     VendorConfig(
         "rime_wubi_sentens_wubi86",
