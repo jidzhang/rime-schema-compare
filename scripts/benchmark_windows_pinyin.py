@@ -968,6 +968,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     root = _REPO_ROOT
     out_dir = (root / args.out_dir).resolve()
     corpora = _corpus_inputs(root, args.corpus)
+    # 黑盒输入同样优先查 gold 读音 sidecar（与白盒口径一致；无 sidecar 回退现算）
+    import rime_schema_compare.text_pipeline as _tpx
+    for _cp in (args.corpus or []):
+        try:
+            _tpx.activate_gold_pinyin_for_corpus(Path(_cp))
+            if _tpx._GOLD_PINYIN_MAP is not None:
+                logger.info("[gold] 读音 sidecar 已加载: %s (%d 段)", _cp, len(_tpx._GOLD_PINYIN_MAP))
+                break
+        except Exception:
+            pass
     eval_synonyms, eval_synonyms_path = init_eval_synonyms(root, args.eval_synonyms)
     extra_profiles = None
     if args.extra_imes and Path(args.extra_imes).is_file():
