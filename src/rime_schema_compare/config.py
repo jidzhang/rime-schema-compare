@@ -55,6 +55,7 @@ DEFAULT_VENDORS: List[VendorConfig] = [
     VendorConfig("wanxiang", "vendor/rime_wanxiang", "wanxiang"),
     VendorConfig("rime_wanxiang_with_gram", "vendor/rime_wanxiang_with_gram", "wanxiang"),
     VendorConfig("oh_my_rime", "vendor/oh-my-rime", "rime_mint"),
+    VendorConfig("oh_my_rime_with_gram", "vendor/oh-my-rime_with_gram", "rime_mint"),
     VendorConfig(
         "rime_wubi_sentens_wubi86",
         "vendor/rime-wubi-sentence",
