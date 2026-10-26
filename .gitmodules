@@ -11,3 +11,6 @@
 [submodule "vendor/rime-wubi-sentence"]
 	path = vendor/rime-wubi-sentence
 	url = https://github.com/gaboolic/rime-wubi-sentence
+[submodule "vendor/oh-my-rime"]
+	path = vendor/oh-my-rime
+	url = https://github.com/Mintimate/oh-my-rime

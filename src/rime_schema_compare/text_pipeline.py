@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from functools import lru_cache
 from pathlib import Path
@@ -42,8 +43,8 @@ _HANZI_ONLY_RE = re.compile(r"^[\u4e00-\u9fff]+$")
 # 分句后：含 ASCII 数字或英文字母的片段不参与评测（与「纯汉字」规则一致，单独检测便于统计）
 _ASCII_DIGIT_OR_LETTER_RE = re.compile(r"[0-9A-Za-z]")
 
-# 纯汉字片段至少含多少个字才参与评测
-MIN_EVAL_HANZI_CHARS = 5
+# 纯汉字片段至少含多少个字才参与评测（环境变量可覆盖：词级语料用 2）
+MIN_EVAL_HANZI_CHARS = int(os.environ.get("RIME_BENCH_MIN_HANZI", "5") or "5")
 
 # Remove common punctuation and whitespace; keep Hanzi, Latin, digits as needed
 _PUNCT_RE = re.compile(
