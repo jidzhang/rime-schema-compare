@@ -236,3 +236,9 @@ artifacts_cmp/
 artifacts_v2*/
 artifacts_moqi*/
 artifacts_bb*/
+gram_train/feed.txt
+gram_train/zhihu-bigram.txt
+vendor/rime-frost_newgram/
+vendor/rime-frost_moqiprod/
+artifacts_newgram/
+artifacts_d3/
