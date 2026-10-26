@@ -48,6 +48,7 @@ from rime_schema_compare.config import DEFAULT_VENDORS, VendorConfig, resolve_ri
 from rime_schema_compare.eval_synonyms import EvalSynonymConfig, load_eval_synonyms_config
 from rime_schema_compare.metrics import levenshtein, sentence_exact_match
 from rime_schema_compare.rime_runner import RimeDistroRunner
+from rime_schema_compare import text_pipeline as tp
 from rime_schema_compare.text_pipeline import (
     MIN_EVAL_HANZI_CHARS,
     extract_hanzi,
@@ -717,6 +718,9 @@ def run_benchmark(
     norm = eval_synonyms.normalize
 
     logger.info("[语料:%s] 读取 UTF-8: %s", corpus_label, corpus_path)
+    tp.activate_gold_pinyin_for_corpus(corpus_path)
+    if tp._GOLD_PINYIN_MAP is not None:
+        logger.info("[语料:%s] gold 读音 sidecar 已加载: %d 段", corpus_label, len(tp._GOLD_PINYIN_MAP))
     if exact_match_top_n > 1:
         logger.info("[评测] 句子正确判定: 前 %d 个候选任一匹配 gold 即判对", exact_match_top_n)
     t0 = time.perf_counter()

@@ -26,6 +26,10 @@ load_phrases_dict({
     "重做": [["chóng"], ["zuò"]],
     "重画": [["chóng"], ["huà"]],
     "重绘": [["chóng"], ["huì"]],
+    # 2026-10-26 交叉审计新发现：pypinyin 把"尼泊尔"转成 ni po er（湖泊音），
+    # 标准音 ní bó ěr（三家词库一致作证）；正式语料已有 .pin.tsv sidecar 兜底，
+    # 此条为无 sidecar 场景的 fallback：
+    "尼泊尔": [["ní"], ["bó"], ["ěr"]],
 })
 
 # 分句后片段须能通过 is_pure_hanzi_segment，故全角逗号、句号始终作为切分点；引号内逗号也要切，否则会留下「汉字+，」。
@@ -181,12 +185,43 @@ def strip_inner_punct(s: str) -> str:
 
 
 def sentence_to_continuous_pinyin(s: str) -> str:
-    """Lowercase contiguous pinyin, Hanzi only (reproducible baseline)."""
+    """Lowercase contiguous pinyin, Hanzi only (reproducible baseline).
+
+    优先查 gold sidecar（<corpus>.pin.tsv，人工/交叉审计定版读音）；
+    无 sidecar 或未命中时回退 pypinyin 现算（含 load_phrases_dict 纠错）。
+    """
     hz = extract_hanzi(s)
     if not hz:
         return ""
+    if _GOLD_PINYIN_MAP is not None:
+        hit = _GOLD_PINYIN_MAP.get(hz)
+        if hit is not None:
+            return hit
     syllables = lazy_pinyin(hz, style=Style.NORMAL, errors="ignore")
     return "".join(syllables).lower()
+
+
+# gold sidecar 状态：由 benchmark 主循环按语料激活（corpus 同目录 <stem>.pin.tsv）
+_GOLD_PINYIN_MAP: Dict[str, str] | None = None
+
+
+def activate_gold_pinyin_for_corpus(corpus_path) -> None:
+    """若语料同目录存在 <stem>.pin.tsv 则加载为 gold 读音表；否则清空回退现算。"""
+    global _GOLD_PINYIN_MAP
+    from pathlib import Path as _P
+    p = _P(corpus_path)
+    sidecar = p.with_name(p.stem + ".pin.tsv")
+    if sidecar.is_file():
+        m: Dict[str, str] = {}
+        for line in open(sidecar, encoding="utf-8"):
+            if line.startswith("#") or not line.strip():
+                continue
+            parts = line.rstrip("\n").split("\t")
+            if len(parts) == 2 and parts[0]:
+                m[parts[0]] = parts[1]
+        _GOLD_PINYIN_MAP = m
+    else:
+        _GOLD_PINYIN_MAP = None
 
 
 _CODE_LETTERS_RE = re.compile(r"[A-Za-z]+")
