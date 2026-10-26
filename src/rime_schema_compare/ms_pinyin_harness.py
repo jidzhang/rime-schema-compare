@@ -408,6 +408,24 @@ class WindowsImeSwitcher:
             except RuntimeError:
                 pass
             time.sleep(0.2)
+        # 2026-10-26 补丁：部分系统状态下老式 IMM 布局不再响应
+        # LoadKeyboardLayout+WM_INPUTLANGCHANGEREQUEST（本机 10-25 起实测，
+        # 纯键盘布局仍响应、IME 布局一律无效），沿用 TIP 路径的 Win+空格/
+        # Ctrl+Shift 轮巡兜底（实测 16 次内可切到华宇 V6.9 并正常出汉字）。
+        for combo in ("win_space", "ctrl_shift"):
+            for _ in range(len(self._profiles) + 2):
+                if combo == "win_space":
+                    self._send_win_space()
+                else:
+                    self._send_ctrl_shift()
+                time.sleep(0.45)
+                try:
+                    payload = self.get_active_profile_payload()
+                except RuntimeError:
+                    continue
+                if klid.lower() in str(payload.get("hkl") or "").lower():
+                    self._active_input_tip = profile.input_tip
+                    return profile
         raise RuntimeError(f"ime_switch_not_confirmed:{profile.ime_key}")
 
     def _wait_for_active_profile(
