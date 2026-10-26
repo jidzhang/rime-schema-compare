@@ -13,7 +13,7 @@
 
 最新评测结果表明，[白霜拼音](https://github.com/gaboolic/rime-frost)以及[万象拼音](https://github.com/amzxyz/rime_wanxiang)使用ngrams模型均超越了微软拼音。
 
-[2026.10.26日评测结果](report/2026-10-26.md)（zhihu120 正式卷，新增薄荷拼音 vendor；两种口径排序同构：白霜 > 雾凇 > 薄荷 ≈ 万象 > 明月，白霜双口径领跑 54.17/65.83），[2026.4.25日评测结果](report/2026-04-25.md)，[白霜拼音](https://github.com/gaboolic/rime-frost)在不使用模型时领先其他方案；使用模型时，已超越商业输入法的准确率（[白霜拼音用模型]句子正确率: 71.54% (176/246 句完全匹配)，手心输入法句子正确率: 71.14%  (175/246 句完全匹配)）。
+[2026.10.26日评测结果](report/2026-10-26.md)（zhihu120 正式卷，新增薄荷拼音 vendor；两种口径排序同构：白霜 > 雾凇 > 薄荷 > 万象 > 明月，白霜双口径领跑 55.00/65.83；读音经 vendor 词库交叉审计冻结为 gold sidecar），[2026.4.25日评测结果](report/2026-04-25.md)，[白霜拼音](https://github.com/gaboolic/rime-frost)在不使用模型时领先其他方案；使用模型时，已超越商业输入法的准确率（[白霜拼音用模型]句子正确率: 71.54% (176/246 句完全匹配)，手心输入法句子正确率: 71.14%  (175/246 句完全匹配)）。
 
 
 [查看rime多方案top3正确率最新评测结果（调用我修改的librime）](report/top3_latest.md) 我修改的librime：https://github.com/gaboolic/librime 修改了组句算法，支持输出多个整句候选
@@ -22,7 +22,7 @@
 
 默认参与对比的方案在 `src/rime_schema_compare/config.py` 的 `DEFAULT_VENDORS` 中定义：每个条目包含 **vendor 键**（命令行与报表列名）、**子目录**、以及 **主 schema_id**（librime 里选用的方案 ID）。
 
-默认对比的基础方案均按“**无语言模型、无用户词库**”口径评测：不额外挂载 `.gram` 模型文件，且评测前会清理 `userdb` 并通过 `custom.yaml` 禁用 `translator/enable_user_dict`。所有 `*_with_gram` 变体也统一复用同一个 [`wanxiang-lts-zh-hans.gram`](https://github.com/amzxyz/RIME-LMDG/releases)，仅在各自方案目录下额外挂载该语言模型，其余仍保持禁用用户词库。
+默认对比的基础方案均按“**无语言模型、无用户词库**”口径评测：不额外挂载 `.gram` 模型文件，且评测前会清理 `userdb` 并通过 `custom.yaml` 禁用 `translator/enable_user_dict`。所有 `*_with_gram` 变体也统一复用同一个 `wanxiang-lts-zh-hans.gram`（本机挂载版 398,505,004 B，sha256 `1849e5e4…`，取自本机 MoqiIME installer dist，与 [RIME-LMDG releases](https://github.com/amzxyz/RIME-LMDG/releases) LTS 资产为不同构建），仅在各自方案目录下额外挂载该语言模型，其余仍保持禁用用户词库。`*_with_gram` 目录不含 .git（副本+grammar 补丁+gram 硬链接），裸 vendor 目录保持无 gram。
 
 | Vendor 键 | 目录 | 主 schema | 说明 |
 |-----------|------|-----------|------|
@@ -34,6 +34,8 @@
 | `rime_frost_with_gram` | `vendor/rime-frost_with_gram` | `rime_frost` | 带 `wanxiang-lts-zh-hans` ngram 模型的白霜拼音；其余配置与 `vendor/rime-frost` 保持一致 |
 | `wanxiang` | `vendor/rime_wanxiang` | `wanxiang` | 万象拼音（子模块跟踪分支 `wanxiang`，见 [.gitmodules](.gitmodules)） |
 | `rime_wanxiang_with_gram` | `vendor/rime_wanxiang_with_gram` | `wanxiang` | 带 `ngrams` 模型文件的万象拼音；其余配置与 `vendor/rime_wanxiang` 保持一致 |
+| `oh_my_rime` | `vendor/oh-my-rime` | `rime_mint` | 薄荷拼音（oh-my-rime），全拼入口 `rime_mint`（2026-10-26 新增） |
+| `oh_my_rime_with_gram` | `vendor/oh-my-rime_with_gram` | `rime_mint` | 带 gram 模型的薄荷拼音；其余配置与 `vendor/oh-my-rime` 保持一致 |
 | `rime_wubi_sentens_wubi86` | `vendor/rime-wubi-sentence` | `wubi86` | `gaboolic/rime-wubi-sentence` 的五笔整句 `wubi86` 方案；输入串按单字形码表取前 2 码连续拼接 |
 | `rime_wubi_sentens_wubi86_with_gram` | `vendor/rime-wubi-sentence_with_gram` | `wubi86` | 带 `wanxiang-lts-zh-hans` ngram 模型的五笔整句 `wubi86` 方案；其余配置与 `vendor/rime-wubi-sentence` 保持一致 |
 
