@@ -52,3 +52,11 @@ cd gram_train && ../scripts/gram/build_grammar.exe zh-newmoqi < feed.txt
 
 自训模型是唯一被允许评估的模型（万象/essay 臂停用）；白盒测霜+新模型，
 对比裸霜基线（zhihu120 55.00）：有作用→继续，无作用→停。
+
+## v2（2026-10-27 定版）：纯维基源
+
+许可审计后剔除全部可疑源（TED CC BY-NC-ND / OpenSubtitles 未清权 / Leipzig 仅研究 /
+News-Commentary 存疑 / 知乎平台条款且实测零贡献），**唯一训练源=中文维基百科**
+（wiki-train2/3/4a/4b/5a/5b，CC BY-SA 4.0 署名即可）。性能：整句 59.17（与 15 源
+v1 持平）、词级 100 零回归、混拼 61.33（v1 56.89，反超 essay 60.00）；64.5MB、
+1291 万签名。`zh-moqi-lts.gram` 即 v2；v1（15 源，67MB）作废撤回（许可不可审计）。
