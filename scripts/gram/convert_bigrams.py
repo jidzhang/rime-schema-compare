@@ -91,14 +91,16 @@ def main() -> int:
                 n_pairs += 1
         sys.stderr.write(f"[convert] {name} weight={w} rows={n_rows} pairs={n_pairs}\n")
 
-    out = 0
-    for k, v in sorted(agg.items()):
-        if v < args.min_count or len(src_hits[k]) < args.min_sources:
-            continue
-        # build_grammar reads "key value" whitespace-separated from stdin
-        sys.stdout.write(f"{k} {v:g}\n")
-        out += 1
-    sys.stderr.write(f"[convert] signatures emitted: {out} (min-count {args.min_count})\n")
+    kept = sorted(((k, v) for k, v in agg.items()
+                   if v >= args.min_count and len(src_hits[k]) >= args.min_sources),
+                  key=lambda kv: -kv[1])
+    if args.emit_top > 0:
+        kept = kept[:args.emit_top]
+    for k, v in kept:
+        sys.stdout.write("%s %g" % (k, v) + chr(10))
+    out = len(kept)
+    sys.stderr.write("[convert] signatures emitted: %d (min-count %s, min-sources %s, emit-top %s)"
+                     % (out, args.min_count, args.min_sources, args.emit_top or "all"))
     return 0
 
 
